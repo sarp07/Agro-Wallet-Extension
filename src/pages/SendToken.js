@@ -34,7 +34,7 @@ const SendToken = () => {
         Bakiye: {token.balance} {token.symbol}
       </Typography>
       <TextField
-        label="Reciever Address"
+        label="Recipient Address"
         variant="outlined"
         fullWidth
         margin="normal"
@@ -57,7 +57,6 @@ const SendToken = () => {
         variant="outlined"
         fullWidth
         margin="normal"
-        type="number"
         sx={{
           input: { color: "white" },
           "& label.Mui-focused": { color: "white" },
@@ -83,7 +82,7 @@ const SendToken = () => {
           "&:hover": { backgroundColor: "darkgreen" },
         }}
       >
-        Sende
+        Next
       </Button>
     </Box>
   );

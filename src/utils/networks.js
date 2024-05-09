@@ -11,7 +11,7 @@ const networks = {
     {
       name: "Binance Smart Chain",
       chainId: "0x38",
-      rpcUrl: `https://binance-mainnet.infura.io/v3/${infuraApiKey}`,
+      rpcUrl: `https://bsc-dataseed1.binance.org/`,
       currencySymbol: "BNB",
     },
     {
@@ -37,7 +37,7 @@ const networks = {
     {
       name: "BSC-Testnet",
       chainId: "0x61",
-      rpcUrl: `https://bsc-testnet.public.blastapi.io	`,
+      rpcUrl: `https://data-seed-prebsc-1-s1.binance.org:8545/`,
       currencySymbol: "BNB",
     },
     {

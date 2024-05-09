@@ -12,18 +12,20 @@ import { useNavigate } from "react-router-dom";
 import { WalletContext } from "../context/WalletContext";
 
 const Recover = () => {
-  const { recoverWallet, alertMessage, alertType, setAlertMessage, wallet} =
+  const { recoverWallet, isMnemonicConfirmed, alertMessage, alertType, setAlertMessage, wallet} =
     useContext(WalletContext);
   const [mnemonic, setMnemonic] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const navigate = useNavigate();
-  
+
   useEffect(() => {
-    if (wallet) {
+    if (!isMnemonicConfirmed) {
+      return;
+    } else if (wallet) {
       navigate('/Dashboard');
     };
-  }, [wallet, navigate]);
+  }, [wallet, isMnemonicConfirmed, navigate]);
 
   const handleRecover = () => {
     recoverWallet(mnemonic, password, confirmPassword);

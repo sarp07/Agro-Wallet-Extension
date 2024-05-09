@@ -8,7 +8,7 @@ import {
 import { WalletContext } from '../context/WalletContext';
 
 const Create = () => {
-  const { createPassword, wallet } = useContext(WalletContext);
+  const { createPassword, wallet, isMnemonicConfirmed } = useContext(WalletContext);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const navigate = useNavigate();
@@ -18,10 +18,12 @@ const Create = () => {
   };
 
   useEffect(() => {
-    if (wallet) {
+    if (!isMnemonicConfirmed) {
+      return;
+    } else if (wallet) {
       navigate('/Dashboard');
     };
-  }, [wallet, navigate]);
+  }, [wallet, isMnemonicConfirmed, navigate]);
 
   return (
     <div className="flex flex-col items-center justify-center p-4 h-full">

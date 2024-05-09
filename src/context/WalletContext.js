@@ -60,6 +60,8 @@ export const WalletProvider = ({ children }) => {
   const [tokens, setTokens] = useState([]);
   const [NFTs, setNFTs] = useState([]);
   const [maxAmount, setMaxAmount] = useState("");
+  const [isMnemonicConfirmed, setIsMnemonicConfirmed] = useState(false);
+  const [gasPrice, setGasPrice] = useState("");
 
   const ERC20_ABI = [
     "function name() view returns (string)",
@@ -79,6 +81,7 @@ export const WalletProvider = ({ children }) => {
       setWallet(walletData.wallet);
       setMnemonicPhrase(walletData.mnemonicPhrase);
       setPrivKey(walletData.privKey);
+      setIsMnemonicConfirmed(walletData.isMnemonicConfirmed || false);
     }
   }, []);
 
@@ -90,6 +93,7 @@ export const WalletProvider = ({ children }) => {
           wallet: randomWallet.address,
           privKey: randomWallet.privateKey,
           mnemonicPhrase: randomWallet.mnemonic.phrase,
+          setIsMnemonicConfirmed: false,
         }),
         ENCRYPTION_KEY
       ).toString();
@@ -98,11 +102,35 @@ export const WalletProvider = ({ children }) => {
       setWallet(randomWallet.address);
       setMnemonicPhrase(randomWallet.mnemonic.phrase);
       setPrivKey(randomWallet.privateKey);
+      setIsMnemonicConfirmed(false);
       console.log("Wallet created and saved successfully");
     } catch (error) {
       console.error("Failed to create the wallet:", error);
       setAlertMessage("Failed to create the wallet. Please try again.");
       setAlertType("error");
+    }
+  };
+
+  const verifyMnemonic = (userInputMnemonic) => {
+    if (mnemonicPhrase === userInputMnemonic) {
+      setIsMnemonicConfirmed(true);
+      const walletData = loadFromLocalStorage("walletData");
+      walletData.isMnemonicConfirmed = true;
+      saveToLocalStorage("walletData", walletData);
+      setAlertMessage("Success! Mnemonic phrases confirmed.");
+      setAlertType("success");
+      setTimeout(() => {
+        setAlertMessage("");
+        setAlertType("");
+        navigate("/dashboard");
+      }, 2200);
+    } else {
+      setAlertMessage("Mnemonic mismatch. Please try again.");
+      setAlertType("error");
+      setTimeout(() => {
+        setAlertMessage("");
+        setAlertType("");
+      }, 1200);
     }
   };
 
@@ -176,6 +204,10 @@ export const WalletProvider = ({ children }) => {
         navigate("/Dashboard");
         setAlertMessage("");
         setAlertType("");
+        setIsMnemonicConfirmed(true);
+        const walletData = loadFromLocalStorage("walletData");
+        walletData.isMnemonicConfirmed = true;
+        saveToLocalStorage("walletData", walletData);
       }, 2000);
       console.log("Wallet recovered and data saved successfully");
     } catch (error) {
@@ -425,8 +457,10 @@ export const WalletProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    refreshBalance();
-  }, [selectedNetwork, wallet]);
+    if (wallet && selectedNetwork && selectedNetwork?.network) {
+      refreshBalance();
+    }
+  }, [selectedNetwork, selectedNetwork.network, wallet]);
 
   const sendTransaction = async (recipientAddress, amount) => {
     if (!wallet || !recipientAddress || !amount) {
@@ -447,7 +481,6 @@ export const WalletProvider = ({ children }) => {
       const provider = new ethers.JsonRpcProvider(networkDetails.rpcUrl);
       const senderWallet = new ethers.Wallet(privKey, provider);
 
-      // Make sure `amount` is a string before calling parseEther
       const formattedAmount =
         typeof amount === "string" ? amount : String(amount);
 
@@ -482,6 +515,7 @@ export const WalletProvider = ({ children }) => {
       setWallet(walletData.wallet);
       setMnemonicPhrase(walletData.mnemonicPhrase);
       setPrivKey(walletData.privKey);
+      setIsMnemonicConfirmed(walletData.isMnemonicConfirmed || false);
     }
 
     if (savedTokens) {
@@ -575,26 +609,75 @@ export const WalletProvider = ({ children }) => {
     }
 
     const provider = new ethers.JsonRpcProvider(networkDetails.rpcUrl);
-    try {
-      const feeData = await provider.getFeeData();
-      const formattedGasPrice = ethers.formatUnits(
-        feeData.maxFeePerGas.toString(),
-        "ether"
-      );
-      const balance = await provider.getBalance(wallet);
-      const balanceEth = ethers.formatUnits(balance, "ether");
-      const maxBalance = balanceEth - formattedGasPrice;
-      setMaxAmount(maxBalance);
-    } catch (error) {
-      console.error("Error calculating balance or fetching gas price:", error);
-      setMaxAmount("0");
-    }
+try {
+  let formattedGasPrice;
+  const isBSC = networkDetails.chainId === "0x61" || networkDetails.chainId === "0x38";
+  if (isBSC) {
+    // BSC için sabit gas ücreti kullan
+    formattedGasPrice = "0.000110000000000";
+  } else {
+    // Diğer ağlar için dinamik gas ücreti kullan
+    const feeData = await provider.getFeeData();
+    formattedGasPrice = ethers.formatUnits(feeData.maxFeePerGas.toString(), "ether");
+  }
+  
+  setGasPrice(formattedGasPrice);
+  localStorage.setItem("gasPrice", formattedGasPrice);
+
+  // Burada hesap bakiyesini kontrol ediyoruz
+  const balance = await provider.getBalance(wallet);
+  const balanceEth = ethers.formatUnits(balance, "ether");
+  const maxBalance = balanceEth - formattedGasPrice;
+  setMaxAmount(maxBalance);
+} catch (error) {
+  console.error("Error calculating balance or fetching gas price:", error);
+  setMaxAmount("0");
+}
   };
+
+  useEffect(() => {
+    async function fetchGasPrice() {
+      if (!wallet || !selectedNetwork) {
+        console.error("Wallet or network configuration is missing.");
+        return;
+      }
+
+      const networkDetails = networksConfig[selectedNetwork.category].find(
+        (net) => net.name === selectedNetwork.network
+      );
+      if (!networkDetails || !networkDetails.rpcUrl) {
+        console.error("Network details or RPC URL not found.");
+        return;
+      }
+      const isBSC =
+        networkDetails.chainId === "0x61" || networkDetails.chainId === "0x38";
+      if (isBSC) {
+        setGasPrice("0.000110000000000"); // Sabit ücreti BNB cinsinden ayarla
+        localStorage.setItem("gasPrice", "0.0000079");
+      } else {
+        const provider = new ethers.JsonRpcProvider(networkDetails.rpcUrl);
+        try {
+          const feeData = await provider.getFeeData();
+          const formattedGasPrice = ethers.formatUnits(
+            feeData.maxFeePerGas.toString(),
+            "ether"
+          );
+          setGasPrice(formattedGasPrice);
+          localStorage.setItem("gasPrice", formattedGasPrice);
+        } catch (error) {
+          console.error("Error fetching gas price:", error);
+        }
+      }
+    }
+
+    fetchGasPrice();
+  }, [selectedNetwork]);
 
   const logout = () => {
     localStorage.clear();
     setWallet(null);
     setMnemonicPhrase("");
+    setIsMnemonicConfirmed(false);
     setPrivKey("");
     setSelectedNetwork(null);
     setBalance("Loading...");
@@ -623,6 +706,9 @@ export const WalletProvider = ({ children }) => {
     sendTransaction,
     networks,
     addCustomNetwork,
+    gasPrice,
+    verifyMnemonic,
+    isMnemonicConfirmed,
     recoverWallet,
     addToken,
     tokens,
@@ -640,10 +726,10 @@ export const WalletProvider = ({ children }) => {
         <Container
           maxWidth="sm"
           style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
+            position: "fixed",
+            top: "10px",
+            display: "flex",
+            justifyContent: "center",
             zIndex: 9999,
           }}
         >

@@ -3,14 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { WalletContext } from '../context/WalletContext';
 
 const Home = () => {
-    const { wallet } = useContext(WalletContext);
+    const { wallet, isMnemonicConfirmed } = useContext(WalletContext);
     const navigate = useNavigate();
 
     useEffect(() => {
-      if (wallet) {
+      if (!isMnemonicConfirmed) {
+        navigate('/');
+      } else if (wallet) {
         navigate('/Dashboard');
       };
-    }, [wallet, navigate]);
+    }, [wallet, isMnemonicConfirmed, navigate]);
     
     const clickCreate = () => {
         navigate('/create');

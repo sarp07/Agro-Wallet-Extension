@@ -1,4 +1,4 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -12,7 +12,9 @@ import {
   Paper,
   Container,
   AppBar,
+  List,
   Toolbar,
+  CircularProgress,
   CssBaseline,
   Grid,
 } from "@mui/material";
@@ -28,6 +30,18 @@ import { useNavigate } from "react-router-dom";
 import AddTokenModal from "../components/TokenModal";
 import AddNFTModal from "../components/NftModal";
 import NFTImage from "../components/NFTImage";
+import Menu from "@mui/material/Menu";
+import PaymentsIcon from "@mui/icons-material/Payments";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import AddIcon from "@mui/icons-material/Add";
+import { Settings, AccountBalanceWallet, Outbound } from "@mui/icons-material";
+import SendIcon from "@mui/icons-material/Send";
+import SwapHorizontalCircleIcon from "@mui/icons-material/SwapHorizontalCircle";
+import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
+import { ethers } from "ethers";
 
 function a11yProps(index) {
   return {
@@ -56,27 +70,47 @@ const Dashboard = () => {
     wallet,
     balance,
     refreshBalance,
-    sendNativeToken,
     selectedNetwork,
     setAlertMessage,
     networks,
     setAlertType,
     tokens,
     logout,
-    calculateMaxAmount,
-    maxAmount,
     NFTs,
   } = useContext(WalletContext);
   const navigate = useNavigate();
-  const [recipientAddress, setRecipientAddress] = useState("");
-  const [amount, setAmount] = useState("");
   const [tabValue, setTabValue] = useState(0);
-  const [value, setValue] = useState(0);
   const [isAddTokenModalOpen, setAddTokenModalOpen] = useState(false);
   const [isAddNFTModalOpen, setAddNFTModalOpen] = useState(false);
+  const [isActive, setIsActive] = useState(false);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const networkInfo = networks[selectedNetwork.category]?.find(
-    (net) => net.name === selectedNetwork.network
+  useEffect(() => {
+    if (selectedNetwork && selectedNetwork?.network) {
+      setLoading(false);
+      refreshBalance();
+    }
+  }, [selectedNetwork?.network]);
+
+  const fetchTransactions = async () => {
+    try {
+      const provider = new ethers.EtherscanProvider();
+      const txs = await provider.getHistory(wallet);
+      setTransactions(txs.slice(0, 10));
+    } catch (error) {
+      console.error("Transaction history cannot be fetched", error);
+    }
+  };
+
+  useEffect(() => {
+    if (wallet && selectedNetwork.network) {
+      fetchTransactions();
+    }
+  }, [wallet, selectedNetwork.network]);
+
+  const networkInfo = networks[selectedNetwork?.category]?.find(
+    (net) => net.name === selectedNetwork?.network
   ) || {
     name: "No network",
     currencySymbol: "N/A",
@@ -110,42 +144,67 @@ const Dashboard = () => {
     }
   };
 
-  const handleTransfer = async () => {
-    try {
-      await sendNativeToken(recipientAddress, amount);
-    } catch (error) {
-      console.log(error);
-    }
-  };
-
   const handleOpenAddTokenModal = () => setAddTokenModalOpen(true);
   const handleCloseAddTokenModal = () => setAddTokenModalOpen(false);
 
   const handleOpenAddNFTModal = () => setAddNFTModalOpen(true);
   const handleCloseAddNFTModal = () => setAddNFTModalOpen(false);
 
-  const handleSetMaxAmount = async () => {
-    setAmount(maxAmount);
-  };
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100vh",
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (!selectedNetwork || !selectedNetwork.network) {
+    return (
+      <Typography variant="h6" align="center">
+        Ağ bilgisi yüklenemedi. Lütfen tekrar deneyin.
+      </Typography>
+    );
+  }
+
+  const nativeBalance = async () => {};
 
   return (
     <>
       <CssBaseline />
-      <Box sx={{ pb: 2 }}>
+      <Box sx={{ pb: 2, mb: 5 }}>
         <AppBar
           position="static"
-          sx={{ background: "transparent", boxShadow: "none" }}
+          color="success"
+          sx={{ height: "48px", minHeight: "48px" }}
         >
-          <Toolbar sx={{ justifyContent: "space-between" }}>
-            <Typography variant="h6" noWrap component="div" style={{cursor: 'pointer'}} onClick={() => navigate('/Networks')}>
+          <Toolbar
+            sx={{
+              minHeight: "48px",
+              justifyContent: "space-between",
+              padding: "0 12px",
+            }}
+          >
+            <Typography variant="h6" noWrap sx={{ fontSize: "0.9rem" }}>
+              Acc (0) ▼
+            </Typography>
+            <Typography
+              onClick={() => navigate("/Networks")}
+              style={{ cursor: "pointer" }}
+              variant="h6"
+              noWrap
+              sx={{ fontSize: "0.9rem" }}
+            >
               {selectedNetwork?.network || "Network Seçilmedi"}
             </Typography>
-            <IconButton color="inherit" onClick={refreshBalance}>
-              <RefreshIcon />
-            </IconButton>
           </Toolbar>
         </AppBar>
-
         <Container maxWidth="sm" sx={{ mt: 2 }}>
           <Paper
             variant="outlined"
@@ -159,6 +218,13 @@ const Dashboard = () => {
               color: "white",
             }}
           >
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <img
+                src="assets/images/whitelogo.png"
+                alt="Wallet Logo"
+                className="w-20 h-20 mb-6"
+              />
+            </Box>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Typography
                 variant="body1"
@@ -174,7 +240,134 @@ const Dashboard = () => {
               {formattedBalance} {networkInfo.currencySymbol}
             </Typography>
           </Paper>
-
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-around",
+              padding: "20px",
+              borderRadius: "4px",
+              boxShadow: 1,
+            }}
+          >
+            <Box sx={{ textAlign: "center" }}>
+              <IconButton
+                color="inherit"
+                disabled={!isActive}
+                aria-label="buy/sell"
+              >
+                <ShoppingCartIcon sx={{ color: "darkgray" }} />
+              </IconButton>
+              <Typography
+                sx={{
+                  color: "darkgray",
+                  fontFamily: "Roboto, sans-serif",
+                  fontWeight: "300",
+                }}
+              >
+                Buy/Sell
+              </Typography>
+            </Box>
+            <Box sx={{ textAlign: "center" }}>
+              <IconButton
+                color="inherit"
+                aria-label="stake"
+                sx={{
+                  color: ["AGRO-Testnet", "Binance Smart Chain"].includes(
+                    selectedNetwork?.network
+                  )
+                    ? "white"
+                    : "darkgray",
+                  cursor: ["AGRO-Testnet", "Binance Smart Chain"].includes(
+                    selectedNetwork?.network
+                  )
+                    ? "pointer"
+                    : "default",
+                }}
+                onClick={() => {
+                  if (
+                    ["AGRO-Testnet", "Binance Smart Chain"].includes(
+                      selectedNetwork?.network
+                    )
+                  ) {
+                    navigate("/StakePage");
+                  }
+                }}
+              >
+                <PaymentsIcon />
+              </IconButton>
+              <Typography
+                sx={{
+                  color: ["AGRO-Testnet", "Binance Smart Chain"].includes(
+                    selectedNetwork?.network
+                  )
+                    ? "white"
+                    : "darkgray",
+                  cursor: ["AGRO-Testnet", "Binance Smart Chain"].includes(
+                    selectedNetwork?.network
+                  )
+                    ? "pointer"
+                    : "default",
+                  fontFamily: "Roboto, sans-serif",
+                  fontWeight: "300",
+                }}
+              >
+                Stake
+              </Typography>
+            </Box>
+            <Box
+              sx={{ textAlign: "center" }}
+              onClick={() => navigate("/SendPage")}
+            >
+              <IconButton color="inherit" aria-label="send/receive">
+                <SendIcon sx={{ color: "white" }} />
+              </IconButton>
+              <Typography
+                sx={{
+                  color: "white",
+                  fontFamily: "Roboto, sans-serif",
+                  fontWeight: "300",
+                }}
+              >
+                Send
+              </Typography>
+            </Box>
+            <Box sx={{ textAlign: "center" }}>
+              <IconButton
+                color="inherit"
+                disabled={!isActive}
+                aria-label="bridge"
+              >
+                <Outbound sx={{ color: "darkgray" }} />
+              </IconButton>
+              <Typography
+                sx={{
+                  color: "darkgray",
+                  fontFamily: "Roboto, sans-serif",
+                  fontWeight: "300",
+                }}
+              >
+                Bridge
+              </Typography>
+            </Box>
+            <Box sx={{ textAlign: "center" }}>
+              <IconButton
+                color="inherit"
+                disabled={!isActive}
+                aria-label="swap"
+              >
+                <SwapHorizontalCircleIcon sx={{ color: "darkgray" }} />
+              </IconButton>
+              <Typography
+                sx={{
+                  color: "darkgray",
+                  fontFamily: "Roboto, sans-serif",
+                  fontWeight: "300",
+                }}
+              >
+                Swap
+              </Typography>
+            </Box>
+          </Box>
           <Tabs
             value={tabValue}
             onChange={handleChange}
@@ -198,7 +391,7 @@ const Dashboard = () => {
               sx={{
                 color: "white",
               }}
-              label="Transfer"
+              label="Activities"
               {...a11yProps(2)}
             />
           </Tabs>
@@ -323,103 +516,19 @@ const Dashboard = () => {
             }}
             index={2}
           >
-            <Box
-              component="form"
-              sx={{
-                "& .MuiTextField-root": {
-                  color: "white",
-                  m: "4px",
-                  width: "30ch",
-                },
-              }}
-              noValidate
-              autoComplete="off"
-            >
-              <TextField
-                label="Recipient Address"
-                value={recipientAddress}
-                onChange={(e) => setRecipientAddress(e.target.value)}
-                fullWidth
-                variant="filled"
-                sx={{
-                  input: { color: "white" },
-                  "& .MuiFilledInput-underline:before": {
-                    borderBottomColor: "white",
-                  },
-                  "& .MuiFilledInput-underline:after": {
-                    borderBottomColor: "white",
-                  },
-                  "& .MuiInputLabel-root": { color: "white" },
-                  "& .MuiInputLabel-root.Mui-focused": { color: "white" },
-                  "& .MuiFilledInput-root": {
-                    backgroundColor: "rgba(255, 255, 255, 0.09)",
-                    "&:hover": {
-                      backgroundColor: "rgba(255, 255, 255, 0.13)",
-                    },
-                  },
-                }}
-              />
-              <Grid container spacing={2}>
-                <Grid item xs={9}>
-                  <TextField
-                    label="Amount to Send"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    fullWidth
-                    variant="filled"
-                    sx={{
-                      input: { color: "white" },
-                      "& .MuiFilledInput-underline:before": {
-                        borderBottomColor: "white",
-                      },
-                      "& .MuiFilledInput-underline:after": {
-                        borderBottomColor: "white",
-                      },
-                      "& .MuiInputLabel-root": { color: "white" },
-                      "& .MuiInputLabel-root.Mui-focused": { color: "white" },
-                      "& .MuiFilledInput-root": {
-                        backgroundColor: "rgba(255, 255, 255, 0.09)",
-                        "&:hover": {
-                          backgroundColor: "rgba(255, 255, 255, 0.13)",
-                        },
-                      },
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={3}>
-                  <Button
-                    sx={{
-                      mt: 1,
-                      backgroundColor: "transparent",
-                      color: "white",
-                      "&:hover": {
-                        backgroundColor: "transparent",
-                      },
-                    }}
-                    variant="contained"
-                    fullWidth
-                    onClick={handleSetMaxAmount}
-                  >
-                    Add Max
-                  </Button>
-                </Grid>
-              </Grid>
-              <Button
-                sx={{
-                  mt: 2,
-                  mb: 2,
-                  backgroundColor: "green",
-                  color: "lightgreen",
-                  "&:hover": {
-                    backgroundColor: "darkgreen",
-                  },
-                }}
-                variant="contained"
-                fullWidth
-                onClick={handleTransfer}
-              >
-                Transfer
-              </Button>
+            <Box sx={{ width: "100%" }}>
+              <List sx={{ width: "100%" }}>
+                {transactions.map((tx, index) => (
+                  <ListItem key={index}>
+                    <ListItemText
+                      primary={`Hash: ${tx.hash}`}
+                      secondary={`Block: ${
+                        tx.blockNumber
+                      } - Amount: ${ethers.formatEther(tx.value)} ETH`}
+                    />
+                  </ListItem>
+                ))}
+              </List>
             </Box>
           </CustomTabPanel>
         </Container>

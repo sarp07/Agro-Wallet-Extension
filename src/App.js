@@ -14,6 +14,10 @@ import AddNetwork from "./pages/AddNetwork";
 import ImportNFT from "./pages/ImportNFT";
 import ImportToken from "./pages/ImportToken";
 import Dashboard from "./pages/Dashboard";
+import CheckAndApprove from './pages/CheckAndApprove';
+import SendPage from './pages/SendPage';
+import StakePage from './pages/StakePage';
+import ApprovePhrase from "./pages/ApprovePhrase";
 import { WalletProvider } from "./context/WalletContext";
 
 const styles = {
@@ -44,6 +48,10 @@ function App() {
           <Route path="/SendNFT" element={<SendNFT />} />
           <Route path="/SendToken" element={<SendToken />} />
           <Route path="/AddNetwork" element={<AddNetwork />} />
+          <Route path="/ApprovePhrase" element={<ApprovePhrase />} />
+          <Route path="/SendPage" element={<SendPage />} />
+          <Route path="CheckAndApprove" element={<CheckAndApprove />} />
+          <Route path="StakePage" element={<StakePage />} />
         </Routes>
       </WalletProvider>
     </div>
