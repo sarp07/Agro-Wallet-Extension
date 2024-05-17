@@ -2,8 +2,9 @@ import React, { useState, useEffect, useContext } from "react";
 import { Box, Button, Card, TextField, Typography } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { WalletContext } from "../context/WalletContext";
-import { ethers } from "ethers";
 import ConfirmTransaction from '../components/checkTransactionModal';
+
+const { ethers } = require("ethers");
 
 const SendPage = () => {
   const { gasPrice, calculateMaxAmount, maxAmount, selectedNetwork, networks } = useContext(WalletContext);

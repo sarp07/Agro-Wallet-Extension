@@ -22,8 +22,8 @@ const ApprovePhrase = () => {
   const navigate = useNavigate();
 
   const handleControlPhrase = () => {
-    const isAllFilled = mnemonics.every(mnemonic => mnemonic.trim() !== "");
-  
+    const isAllFilled = mnemonics.every((mnemonic) => mnemonic.trim() !== "");
+
     if (!isAllFilled) {
       setAlertMessage("Mnemonic Phrases is empty!");
       setAlertType("error");
@@ -36,16 +36,24 @@ const ApprovePhrase = () => {
       verifyMnemonic(mnemonics.join(" "));
     }
   };
-  
 
   const handlePasteMnemonic = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      const words = text.split(" ");
-      if (words.length === 12) {
-        setMnemonics(words);
+      if (text) {
+        const words = text.split(" ");
+        if (words.length === 12) {
+          setMnemonics(words);
+        } else {
+          setAlertMessage("Oops! Something goes wrong.");
+          setAlertType("error");
+          setTimeout(() => {
+            setAlertMessage("");
+            setAlertType("");
+          }, 1200);
+        }
       } else {
-        setAlertMessage("Oops! Something goes wrong.");
+        setAlertMessage("Clipboard is empty.");
         setAlertType("error");
         setTimeout(() => {
           setAlertMessage("");
@@ -53,7 +61,13 @@ const ApprovePhrase = () => {
         }, 1200);
       }
     } catch (error) {
-      console.log(error);
+      console.error("Error reading from clipboard:", error);
+      setAlertMessage("Failed to read from clipboard.");
+      setAlertType("error");
+      setTimeout(() => {
+        setAlertMessage("");
+        setAlertType("");
+      }, 1200);
     }
   };
 
@@ -123,7 +137,7 @@ const ApprovePhrase = () => {
         </Grid>
         <IconButton
           onClick={handlePasteMnemonic}
-          color="primaray"
+          color="primary"
           sx={{
             color: "white",
             borderColor: "white",

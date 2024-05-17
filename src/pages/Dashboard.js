@@ -41,7 +41,8 @@ import { Settings, AccountBalanceWallet, Outbound } from "@mui/icons-material";
 import SendIcon from "@mui/icons-material/Send";
 import SwapHorizontalCircleIcon from "@mui/icons-material/SwapHorizontalCircle";
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
-import { ethers } from "ethers";
+import { ListItem, ListItemText } from '@mui/material';
+const { ethers } = require("ethers");
 
 function a11yProps(index) {
   return {

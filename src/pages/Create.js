@@ -1,45 +1,53 @@
-import React, { useContext, useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Button,
-  TextField,
-  Grid,
-} from "@mui/material";
-import { WalletContext } from '../context/WalletContext';
+import { Button, TextField, Grid, Box, Typography } from "@mui/material";
+import { ethers } from "ethers";
 
-const Create = () => {
-  const { createPassword, wallet, isMnemonicConfirmed } = useContext(WalletContext);
+const CreateWallet = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [encryptedJson, setEncryptedJson] = useState(null);
   const navigate = useNavigate();
 
-  const handleNext = () => {
-    createPassword(password, confirmPassword);
+  const handleCreateWallet = async () => {
+    if (password !== confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    try {
+      const randomWallet = ethers.Wallet.createRandom();
+      const encryptedJson = await randomWallet.encrypt(password);
+      setEncryptedJson(encryptedJson);
+      setError("");
+    } catch (err) {
+      console.error("Error creating wallet:", err);
+      setError("Error creating wallet. Please try again.");
+    }
   };
 
-  useEffect(() => {
-    if (!isMnemonicConfirmed) {
-      return;
-    } else if (wallet) {
-      navigate('/Dashboard');
-    };
-  }, [wallet, isMnemonicConfirmed, navigate]);
-
   return (
-    <div className="flex flex-col items-center justify-center p-4 h-full">
-      <img
-        src="assets/images/whitelogo.png"
-        alt="Wallet Logo"
-        className="w-32 h-32"
-      />
-      <Grid container spacing={2} marginTop={'30px'} direction="column">
+    <Box
+      sx={{
+        padding: "20px",
+        maxWidth: "500px",
+        margin: "auto",
+        textAlign: "center",
+        height: "100%",
+      }}
+    >
+      <Typography variant="h5" sx={{ marginBottom: "20px" }}>
+        Create a New Wallet
+      </Typography>
+      <Grid container spacing={2} direction="column">
         <Grid item>
           <TextField
             type="password"
             label="Password"
             variant="outlined"
             fullWidth
-            helperText={"Set your strong password!"}
+            helperText="Set your strong password!"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             sx={{
@@ -61,7 +69,7 @@ const Create = () => {
             label="Confirm Password"
             variant="outlined"
             fullWidth
-            helperText={"Confirm your strong password!"}
+            helperText="Confirm your strong password!"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             sx={{
@@ -77,9 +85,14 @@ const Create = () => {
             }}
           />
         </Grid>
+        {error && (
+          <Grid item>
+            <Typography color="error">{error}</Typography>
+          </Grid>
+        )}
         <Grid item>
           <Button
-            onClick={handleNext}
+            onClick={handleCreateWallet}
             variant="contained"
             fullWidth
             sx={{
@@ -89,9 +102,19 @@ const Create = () => {
               "&:hover": { backgroundColor: "darkgreen" },
             }}
           >
-            Confirm
+            Create Wallet
           </Button>
         </Grid>
+        {encryptedJson && (
+          <Grid item>
+            <Typography variant="body1" sx={{ marginTop: "20px" }}>
+              Your encrypted wallet JSON:
+            </Typography>
+            <Typography variant="body2" sx={{ wordBreak: "break-all" }}>
+              {encryptedJson}
+            </Typography>
+          </Grid>
+        )}
         <Grid item>
           <Button
             onClick={() => navigate("/")}
@@ -110,8 +133,8 @@ const Create = () => {
           </Button>
         </Grid>
       </Grid>
-    </div>
+    </Box>
   );
 };
 
-export default Create;
+export default CreateWallet;
