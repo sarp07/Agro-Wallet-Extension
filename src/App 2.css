@@ -1,0 +1,26 @@
+.App {
+  width: 350px;
+  height: 600px;
+  max-width: 350px;
+  max-height: 600px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overflow-y: auto;
+  color: #fff;
+}
+
+.App::-webkit-scrollbar {
+  display: none; 
+}
+
+.App {
+  -ms-overflow-style: none; 
+  scrollbar-width: none; 
+}
+
+* {
+  font-family: "Rubik", sans-serif;
+  margin: 0;
+  padding: 0;
+}

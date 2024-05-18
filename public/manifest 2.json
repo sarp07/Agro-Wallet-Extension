@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Agro Wallet Browser Extension App",
+  "version": "1.0",
+  "action": {
+    "default_popup": "index.html"
+  },
+  "permissions": ["storage", "activeTab"],
+  "icons": {
+    "16": "assets/images/logowithouttext.png",
+    "48": "assets/images/logowithouttext.png",
+    "128": "assets/images/logowithouttext.png"
+  }
+}
