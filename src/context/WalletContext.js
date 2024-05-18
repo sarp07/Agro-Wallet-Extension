@@ -18,7 +18,6 @@ const saveToLocalStorage = (key, data) => {
     localStorage.setItem(key, encryptedData);
   } catch (error) {
     console.error("Error saving data:", error);
-    console.log("Failed to encrypt or save data", error);
   }
 };
 
@@ -33,7 +32,6 @@ const loadFromLocalStorage = (key) => {
     return null;
   } catch (error) {
     console.error("Error loading data:", error);
-    console.log("Failed to decrypt or load data", error);
     return null;
   }
 };
@@ -42,6 +40,8 @@ export const WalletContext = createContext();
 
 export const WalletProvider = ({ children }) => {
   const navigate = useNavigate();
+  const [wallets, setWallets] = useState([]);
+  const [activeWalletIndex, setActiveWalletIndex] = useState(0);
   const [wallet, setWallet] = useState(null);
   const [mnemonicPhrase, setMnemonicPhrase] = useState("");
   const [privKey, setPrivKey] = useState("");
@@ -62,6 +62,10 @@ export const WalletProvider = ({ children }) => {
   const [maxAmount, setMaxAmount] = useState("");
   const [isMnemonicConfirmed, setIsMnemonicConfirmed] = useState(false);
   const [gasPrice, setGasPrice] = useState("");
+  const [provider, setProvider] = useState();
+  const [transactions, setTransactions] = useState(
+    loadFromLocalStorage("transactions") || {}
+  );
 
   const ERC20_ABI = [
     "function name() view returns (string)",
@@ -77,32 +81,232 @@ export const WalletProvider = ({ children }) => {
 
   useEffect(() => {
     const walletData = loadFromLocalStorage("walletData");
+    const activeWalletIndex = loadFromLocalStorage("activeWalletIndex");
     if (walletData) {
-      setWallet(walletData.wallet);
-      setMnemonicPhrase(walletData.mnemonicPhrase);
-      setPrivKey(walletData.privKey);
+      setWallets(walletData.wallets || []);
       setIsMnemonicConfirmed(walletData.isMnemonicConfirmed || false);
+      if (walletData.wallets && walletData.wallets.length > 0) {
+        setActiveWalletData(walletData.wallets[activeWalletIndex || 0]);
+      }
+    }
+    if (activeWalletIndex !== null) {
+      setActiveWalletIndex(activeWalletIndex);
     }
   }, []);
+
+  useEffect(() => {
+    const loadWallet = async () => {
+      const networkCategory = networks[selectedNetwork.category];
+      const networkConfig = networkCategory.find(
+        (net) => net.name === selectedNetwork.network
+      );
+
+      if (!networkConfig) {
+        console.error(`Network configuration for '${selectedNetwork.network}' not found.`);
+        setBalance("Network Error");
+        return;
+      }
+
+      const activeWallet = wallets[activeWalletIndex];
+      if (activeWallet) {
+        const newProvider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
+        const newWallet = new ethers.Wallet(activeWallet.privKey, newProvider);
+        const balanceWei = await newProvider.getBalance(newWallet.address);
+        const formattedBalance = ethers.formatEther(balanceWei);
+        setProvider(newProvider);
+        setBalance(formattedBalance);
+        setActiveWalletData(activeWallet);
+      }
+    };
+
+    loadWallet();
+  }, [wallets, activeWalletIndex, selectedNetwork]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.ethereum = {
+        isMetaMask: true,
+        request: async ({ method, params }) => {
+          switch (method) {
+            case "eth_requestAccounts":
+              return [wallet];
+            case "eth_chainId":
+              return ethers.toQuantity(selectedNetwork.chainId);
+            case "eth_sendTransaction":
+              const tx = {
+                to: params[0].to,
+                value: params[0].value,
+                gasPrice: params[0].gasPrice,
+                gas: params[0].gas,
+              };
+              const signer = provider.getSigner(wallet);
+              const transactionResponse = await signer.sendTransaction(tx);
+              return transactionResponse.hash;
+            // Diğer gerekli RPC metotları için case blokları ekleyin.
+            default:
+              throw new Error(`Method ${method} not supported.`);
+          }
+        },
+        on: (eventName, callback) => {
+          switch (eventName) {
+            case "accountsChanged":
+              window.addEventListener("wallet_accountChanged", callback);
+              break;
+            case "chainChanged":
+              window.addEventListener("wallet_chainChanged", callback);
+              break;
+            default:
+              break;
+          }
+        },
+        removeListener: (eventName, callback) => {
+          switch (eventName) {
+            case "accountsChanged":
+              window.removeEventListener("wallet_accountChanged", callback);
+              break;
+            case "chainChanged":
+              window.removeEventListener("wallet_chainChanged", callback);
+              break;
+            default:
+              break;
+          }
+        },
+      };
+    }
+  }, [wallet, selectedNetwork, provider]);
+
+  useEffect(() => {
+    saveToLocalStorage("activeWalletIndex", activeWalletIndex);
+  }, [activeWalletIndex]);
+
+  const setActiveWalletData = (wallet) => {
+    setWallet(wallet.address);
+    setMnemonicPhrase(wallet.mnemonicPhrase);
+    setPrivKey(wallet.privKey);
+    saveToLocalStorage("activeWallet", wallet);
+  };
+
+  const addTransaction = (tx, walletAddress) => {
+    const updatedTransactions = { ...transactions };
+    if (!updatedTransactions[walletAddress]) {
+      updatedTransactions[walletAddress] = [];
+    }
+    if (!updatedTransactions[walletAddress].find(t => t.hash === tx.hash)) {
+      updatedTransactions[walletAddress] = [tx, ...updatedTransactions[walletAddress]].slice(0, 10); // Limit to 10 transactions
+      setTransactions(updatedTransactions);
+      saveToLocalStorage("transactions", updatedTransactions);
+    }
+  };
+
+  const sendTransaction = async (to, value) => {
+    if (!wallets[activeWalletIndex]) return;
+    const tx = await wallets[activeWalletIndex].sendTransaction({
+      to,
+      value: ethers.parseEther(value)
+    });
+    await tx.wait();
+    addTransaction(tx, wallets[activeWalletIndex].address);
+    console.log('Transaction success:', tx);
+  };
+
+  const sendNativeToken = async (recipientAddress, amount) => {
+    if (!wallet || !recipientAddress || !amount) {
+      setAlertMessage("Please check your input fields.");
+      setAlertType("error");
+      return;
+    }
+
+    try {
+      const networkDetails = networksConfig[selectedNetwork.category].find(
+        (net) => net.name === selectedNetwork.network
+      );
+      if (!networkDetails || !networkDetails.rpcUrl) {
+        console.error("Network details or RPC URL not found.");
+        return;
+      }
+
+      const provider = new ethers.JsonRpcProvider(networkDetails.rpcUrl);
+      const senderWallet = new ethers.Wallet(privKey, provider);
+
+      const formattedAmount =
+        typeof amount === "string" ? amount : String(amount);
+
+      const txResponse = await senderWallet.sendTransaction({
+        to: recipientAddress,
+        value: ethers.parseEther(formattedAmount), // Ensure amount is a string
+      });
+      await txResponse.wait();
+      setAlertMessage("Transaction successful!");
+      setAlertType("success");
+      addTransaction(txResponse, wallet);
+      setTimeout(() => {
+        setAlertMessage("");
+        setAlertType("");
+      }, 2200);
+      refreshBalance();
+    } catch (error) {
+      console.error("Transaction failed:", error);
+      setAlertMessage("Transaction failed.");
+      setAlertType("error");
+      setTimeout(() => {
+        setAlertMessage("");
+        setAlertType("");
+      }, 2200);
+    }
+  };
+
+  const sendToken = async (toAddress, amount, tokenAddress) => {
+    const networkCategory = networks[selectedNetwork.category];
+    const networkConfig = networkCategory.find(
+      (net) => net.name === selectedNetwork.network
+    );
+
+    if (!networkConfig || !networkConfig.rpcUrl) {
+      console.error("Network konfigürasyonu bulunamadı!");
+      return;
+    }
+
+    const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
+
+    try {
+      const signer = provider.getSigner();
+      const tokenContract = new ethers.Contract(
+        tokenAddress,
+        ERC20_ABI,
+        signer
+      );
+      const transactionResponse = await tokenContract.transfer(
+        toAddress,
+        ethers.parseUnits(amount, "ether")
+      );
+      await transactionResponse.wait();
+      setAlertMessage("Token sended successfully!", transactionResponse.hash);
+      setAlertType("success");
+      addTransaction(transactionResponse, wallet);
+      setTimeout(() => {
+        setAlertMessage("");
+        setAlertType("");
+      }, 2200);
+      console.log(`Token başarıyla gönderildi: ${transactionResponse.hash}`);
+    } catch (error) {
+      console.error("Token gönderimi sırasında hata oluştu: ", error);
+    }
+  };
 
   const handleCreateWallet = async () => {
     try {
       const randomWallet = ethers.Wallet.createRandom();
-      const encryptedData = CryptoJS.AES.encrypt(
-        JSON.stringify({
-          wallet: randomWallet.address,
-          privKey: randomWallet.privateKey,
-          mnemonicPhrase: randomWallet.mnemonic.phrase,
-          setIsMnemonicConfirmed: false,
-        }),
-        ENCRYPTION_KEY
-      ).toString();
+      const newWallet = {
+        address: randomWallet.address,
+        privKey: randomWallet.privateKey,
+        mnemonicPhrase: randomWallet.mnemonic.phrase,
+      };
 
-      localStorage.setItem("walletData", encryptedData);
-      setWallet(randomWallet.address);
-      setMnemonicPhrase(randomWallet.mnemonic.phrase);
-      setPrivKey(randomWallet.privateKey);
-      setIsMnemonicConfirmed(false);
+      const updatedWallets = [...wallets, newWallet];
+      saveToLocalStorage("walletData", { wallets: updatedWallets, isMnemonicConfirmed });
+      setWallets(updatedWallets);
+      setActiveWalletIndex(updatedWallets.length - 1);
+      setActiveWalletData(newWallet);
       console.log("Wallet created and saved successfully");
     } catch (error) {
       console.error("Failed to create the wallet:", error);
@@ -183,21 +387,18 @@ export const WalletProvider = ({ children }) => {
 
     try {
       const wallet = ethers.Wallet.fromPhrase(mnemonic);
-      const encryptedData = CryptoJS.AES.encrypt(
-        JSON.stringify({
-          wallet: wallet.address,
-          privKey: wallet.privateKey,
-          mnemonicPhrase: mnemonic,
-          password: password,
-        }),
-        ENCRYPTION_KEY
-      ).toString();
+      const newWallet = {
+        address: wallet.address,
+        privKey: wallet.privateKey,
+        mnemonicPhrase: mnemonic,
+        password: password,
+      };
 
-      localStorage.setItem("walletData", encryptedData);
-      setWallet(wallet.address);
-      setMnemonicPhrase(mnemonic);
-      setPrivKey(wallet.privateKey);
-      setPassword(password);
+      const updatedWallets = [...wallets, newWallet];
+      saveToLocalStorage("walletData", { wallets: updatedWallets, isMnemonicConfirmed });
+      setWallets(updatedWallets);
+      setActiveWalletIndex(updatedWallets.length - 1);
+      setActiveWalletData(newWallet);
       setAlertMessage("Wallet recovered successfully!");
       setAlertType("success");
       setTimeout(() => {
@@ -406,43 +607,6 @@ export const WalletProvider = ({ children }) => {
     }
   }, []);
 
-  const sendToken = async (toAddress, amount, tokenAddress) => {
-    const networkCategory = networks[selectedNetwork.category];
-    const networkConfig = networkCategory.find(
-      (net) => net.name === selectedNetwork.network
-    );
-
-    if (!networkConfig || !networkConfig.rpcUrl) {
-      console.error("Network konfigürasyonu bulunamadı!");
-      return;
-    }
-
-    const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrl);
-
-    try {
-      const signer = provider.getSigner();
-      const tokenContract = new ethers.Contract(
-        tokenAddress,
-        ERC20_ABI,
-        signer
-      );
-      const transactionResponse = await tokenContract.transfer(
-        toAddress,
-        ethers.parseUnits(amount, "ether")
-      );
-      await transactionResponse.wait();
-      setAlertMessage("Token sended successfully!", transactionResponse.hash);
-      setAlertType("success");
-      setTimeout(() => {
-        setAlertMessage("");
-        setAlertType("");
-      }, 2200);
-      console.log(`Token başarıyla gönderildi: ${transactionResponse.hash}`);
-    } catch (error) {
-      console.error("Token gönderimi sırasında hata oluştu: ", error);
-    }
-  };
-
   const setSelectedNetworkConfig = (category, networkName) => {
     const newNetworkConfig = { category, network: networkName };
     setSelectedNetwork(newNetworkConfig);
@@ -462,60 +626,14 @@ export const WalletProvider = ({ children }) => {
     }
   }, [selectedNetwork, selectedNetwork.network, wallet]);
 
-  const sendTransaction = async (recipientAddress, amount) => {
-    if (!wallet || !recipientAddress || !amount) {
-      setAlertMessage("Please check your input fields.");
-      setAlertType("error");
-      return;
-    }
-
-    try {
-      const networkDetails = networksConfig[selectedNetwork.category].find(
-        (net) => net.name === selectedNetwork.network
-      );
-      if (!networkDetails || !networkDetails.rpcUrl) {
-        console.error("Network details or RPC URL not found.");
-        return;
-      }
-
-      const provider = new ethers.JsonRpcProvider(networkDetails.rpcUrl);
-      const senderWallet = new ethers.Wallet(privKey, provider);
-
-      const formattedAmount =
-        typeof amount === "string" ? amount : String(amount);
-
-      const txResponse = await senderWallet.sendTransaction({
-        to: recipientAddress,
-        value: ethers.parseEther(formattedAmount), // Ensure amount is a string
-      });
-      await txResponse.wait();
-      setAlertMessage("Transaction successful!");
-      setAlertType("success");
-      setTimeout(() => {
-        setAlertMessage("");
-        setAlertType("");
-      }, 2200);
-      refreshBalance();
-    } catch (error) {
-      console.error("Transaction failed:", error);
-      setAlertMessage("Transaction failed.");
-      setAlertType("error");
-      setTimeout(() => {
-        setAlertMessage("");
-        setAlertType("");
-      }, 2200);
-    }
-  };
-
   useEffect(() => {
     const walletData = loadFromLocalStorage("walletData");
     const savedTokens = loadFromLocalStorage("tokens");
 
     if (walletData) {
-      setWallet(walletData.wallet);
-      setMnemonicPhrase(walletData.mnemonicPhrase);
-      setPrivKey(walletData.privKey);
+      setWallets(walletData.wallets);
       setIsMnemonicConfirmed(walletData.isMnemonicConfirmed || false);
+      setActiveWalletData(walletData.wallets[0]);
     }
 
     if (savedTokens) {
@@ -583,10 +701,8 @@ export const WalletProvider = ({ children }) => {
 
   const saveUserData = () => {
     const walletData = {
-      wallet,
-      mnemonicPhrase,
-      privKey,
-      password,
+      wallets,
+      isMnemonicConfirmed,
       tokens,
       NFTs,
       networks,
@@ -609,30 +725,30 @@ export const WalletProvider = ({ children }) => {
     }
 
     const provider = new ethers.JsonRpcProvider(networkDetails.rpcUrl);
-try {
-  let formattedGasPrice;
-  const isBSC = networkDetails.chainId === "0x61" || networkDetails.chainId === "0x38";
-  if (isBSC) {
-    // BSC için sabit gas ücreti kullan
-    formattedGasPrice = "0.000110000000000";
-  } else {
-    // Diğer ağlar için dinamik gas ücreti kullan
-    const feeData = await provider.getFeeData();
-    formattedGasPrice = ethers.formatUnits(feeData.maxFeePerGas.toString(), "ether");
-  }
-  
-  setGasPrice(formattedGasPrice);
-  localStorage.setItem("gasPrice", formattedGasPrice);
+    try {
+      let formattedGasPrice;
+      const isBSC = networkDetails.chainId === "0x61" || networkDetails.chainId === "0x38";
+      if (isBSC) {
+        // BSC için sabit gas ücreti kullan
+        formattedGasPrice = "0.000110000000000";
+      } else {
+        // Diğer ağlar için dinamik gas ücreti kullan
+        const feeData = await provider.getFeeData();
+        formattedGasPrice = ethers.formatUnits(feeData.maxFeePerGas.toString(), "ether");
+      }
 
-  // Burada hesap bakiyesini kontrol ediyoruz
-  const balance = await provider.getBalance(wallet);
-  const balanceEth = ethers.formatUnits(balance, "ether");
-  const maxBalance = balanceEth - formattedGasPrice;
-  setMaxAmount(maxBalance);
-} catch (error) {
-  console.error("Error calculating balance or fetching gas price:", error);
-  setMaxAmount("0");
-}
+      setGasPrice(formattedGasPrice);
+      localStorage.setItem("gasPrice", formattedGasPrice);
+
+      // Burada hesap bakiyesini kontrol ediyoruz
+      const balance = await provider.getBalance(wallet);
+      const balanceEth = ethers.formatUnits(balance, "ether");
+      const maxBalance = balanceEth - formattedGasPrice;
+      setMaxAmount(maxBalance);
+    } catch (error) {
+      console.error("Error calculating balance or fetching gas price:", error);
+      setMaxAmount("0");
+    }
   };
 
   useEffect(() => {
@@ -675,16 +791,19 @@ try {
 
   const logout = () => {
     localStorage.clear();
+    setWallets([]);
     setWallet(null);
     setMnemonicPhrase("");
-    setIsMnemonicConfirmed(false);
     setPrivKey("");
+    setIsMnemonicConfirmed(false);
     setSelectedNetwork(null);
     setBalance("Loading...");
     navigate("/");
   };
 
   const contextValue = {
+    wallets,
+    activeWallet: wallets[activeWalletIndex],
     wallet,
     mnemonicPhrase,
     privKey,
@@ -695,21 +814,22 @@ try {
     setAlertMessage,
     setAlertType,
     handleCreateWallet,
-    setMnemonicPhrase,
-    setPrivKey,
+    setActiveWalletIndex,
     setSelectedNetwork,
     setSelectedNetworkConfig,
     createPassword,
     updatePassword,
     refreshBalance,
     sendToken,
-    sendTransaction,
+    sendNativeToken,
     networks,
     addCustomNetwork,
     gasPrice,
     verifyMnemonic,
     isMnemonicConfirmed,
     recoverWallet,
+    provider,
+    sendTransaction,
     addToken,
     tokens,
     maxAmount,
@@ -717,6 +837,7 @@ try {
     NFTs,
     addNFT,
     logout,
+    transactions,
   };
 
   return (

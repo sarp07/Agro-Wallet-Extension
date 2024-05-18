@@ -17,7 +17,7 @@ const StakePage = () => {
   const navigate = useNavigate();
   const {
     wallet,
-    sendTransaction,
+    sendNativeToken,
     networks,
     setAlertMessage,
     setAlertType,

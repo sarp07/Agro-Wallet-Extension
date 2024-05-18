@@ -22,14 +22,14 @@ const ConfirmTransaction = ({
   total,
 }) => {
   const navigate = useNavigate();
-  const { sendTransaction, selectedNetwork, networks } =
+  const { sendNativeToken, selectedNetwork, networks } =
     useContext(WalletContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSendTransaction = async () => {
+  const handlesendNativeToken = async () => {
     setIsSubmitting(true);
     try {
-      await sendTransaction(recipientAddress, amount);
+      await sendNativeToken(recipientAddress, amount);
       setTimeout(() => {
         setIsSubmitting(false);
         handleClose();
@@ -107,7 +107,7 @@ const ConfirmTransaction = ({
                 Cancel
               </Button>
               <Button
-                onClick={handleSendTransaction}
+                onClick={handlesendNativeToken}
                 color="success"
                 fullWidth
                 sx={{ mt: 2 }}

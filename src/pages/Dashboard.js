@@ -5,7 +5,6 @@ import {
   IconButton,
   BottomNavigation,
   BottomNavigationAction,
-  TextField,
   Button,
   Tabs,
   Tab,
@@ -13,10 +12,13 @@ import {
   Container,
   AppBar,
   List,
+  ListItem,
+  ListItemText,
   Toolbar,
   CircularProgress,
   CssBaseline,
-  Grid,
+  Menu,
+  MenuItem,
 } from "@mui/material";
 import {
   SettingsOutlined,
@@ -24,23 +26,16 @@ import {
   ExitToAppOutlined,
   Refresh as RefreshIcon,
   CopyAllOutlined,
+  Link as LinkIcon,
 } from "@mui/icons-material";
 import { WalletContext } from "../context/WalletContext";
 import { useNavigate } from "react-router-dom";
 import AddTokenModal from "../components/TokenModal";
 import AddNFTModal from "../components/NftModal";
 import NFTImage from "../components/NFTImage";
-import Menu from "@mui/material/Menu";
 import PaymentsIcon from "@mui/icons-material/Payments";
-import MenuItem from "@mui/material/MenuItem";
-import Select from "@mui/material/Select";
-import FormControl from "@mui/material/FormControl";
-import InputLabel from "@mui/material/InputLabel";
 import AddIcon from "@mui/icons-material/Add";
-import { Settings, AccountBalanceWallet, Outbound } from "@mui/icons-material";
-import SendIcon from "@mui/icons-material/Send";
-import SwapHorizontalCircleIcon from "@mui/icons-material/SwapHorizontalCircle";
-import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
+import { Send as SendIcon, ShoppingCart as ShoppingCartIcon } from "@mui/icons-material";
 import { ethers } from "ethers";
 
 function a11yProps(index) {
@@ -67,6 +62,10 @@ function CustomTabPanel(props) {
 
 const Dashboard = () => {
   const {
+    wallets,
+    activeWallet,
+    setActiveWalletIndex,
+    handleCreateWallet,
     wallet,
     balance,
     refreshBalance,
@@ -77,14 +76,16 @@ const Dashboard = () => {
     tokens,
     logout,
     NFTs,
+    provider,
+    transactions,
   } = useContext(WalletContext);
   const navigate = useNavigate();
   const [tabValue, setTabValue] = useState(0);
   const [isAddTokenModalOpen, setAddTokenModalOpen] = useState(false);
   const [isAddNFTModalOpen, setAddNFTModalOpen] = useState(false);
-  const [isActive, setIsActive] = useState(false);
-  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [isConnectModalOpen, setConnectModalOpen] = useState(false);
 
   useEffect(() => {
     if (selectedNetwork && selectedNetwork?.network) {
@@ -92,22 +93,6 @@ const Dashboard = () => {
       refreshBalance();
     }
   }, [selectedNetwork?.network]);
-
-  const fetchTransactions = async () => {
-    try {
-      const provider = new ethers.EtherscanProvider();
-      const txs = await provider.getHistory(wallet);
-      setTransactions(txs.slice(0, 10));
-    } catch (error) {
-      console.error("Transaction history cannot be fetched", error);
-    }
-  };
-
-  useEffect(() => {
-    if (wallet && selectedNetwork.network) {
-      fetchTransactions();
-    }
-  }, [wallet, selectedNetwork.network]);
 
   const networkInfo = networks[selectedNetwork?.category]?.find(
     (net) => net.name === selectedNetwork?.network
@@ -144,11 +129,85 @@ const Dashboard = () => {
     }
   };
 
+  const handleMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleWalletSelect = (index) => {
+    setActiveWalletIndex(index);
+    handleMenuClose();
+  };
+
+  const handleCreateNewWallet = () => {
+    handleCreateWallet();
+    handleMenuClose();
+  };
+
   const handleOpenAddTokenModal = () => setAddTokenModalOpen(true);
   const handleCloseAddTokenModal = () => setAddTokenModalOpen(false);
 
   const handleOpenAddNFTModal = () => setAddNFTModalOpen(true);
   const handleCloseAddNFTModal = () => setAddNFTModalOpen(false);
+
+  const handleOpenConnectModal = () => setConnectModalOpen(true);
+  const handleCloseConnectModal = () => setConnectModalOpen(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.ethereum = {
+        isMetaMask: true,
+        request: async ({ method, params }) => {
+          switch (method) {
+            case "eth_requestAccounts":
+              return [wallet];
+            case "eth_chainId":
+              return ethers.toQuantity(selectedNetwork.chainId);
+            case "eth_sendTransaction":
+              const tx = {
+                to: params[0].to,
+                value: params[0].value,
+                gasPrice: params[0].gasPrice,
+                gas: params[0].gas,
+              };
+              const signer = provider.getSigner(wallet);
+              const transactionResponse = await signer.sendTransaction(tx);
+              return transactionResponse.hash;
+            // Diğer gerekli RPC metotları için case blokları ekleyin.
+            default:
+              throw new Error(`Method ${method} not supported.`);
+          }
+        },
+        on: (eventName, callback) => {
+          switch (eventName) {
+            case "accountsChanged":
+              window.addEventListener("wallet_accountChanged", callback);
+              break;
+            case "chainChanged":
+              window.addEventListener("wallet_chainChanged", callback);
+              break;
+            default:
+              break;
+          }
+        },
+        removeListener: (eventName, callback) => {
+          switch (eventName) {
+            case "accountsChanged":
+              window.removeEventListener("wallet_accountChanged", callback);
+              break;
+            case "chainChanged":
+              window.removeEventListener("wallet_chainChanged", callback);
+              break;
+            default:
+              break;
+          }
+        },
+      };
+    }
+  }, [wallet, selectedNetwork, provider]);
 
   if (loading) {
     return (
@@ -173,8 +232,6 @@ const Dashboard = () => {
     );
   }
 
-  const nativeBalance = async () => {};
-
   return (
     <>
       <CssBaseline />
@@ -191,9 +248,31 @@ const Dashboard = () => {
               padding: "0 12px",
             }}
           >
-            <Typography variant="h6" noWrap sx={{ fontSize: "0.9rem" }}>
-              Acc (0) ▼
+            <Typography
+              variant="h6"
+              noWrap
+              sx={{ fontSize: "0.9rem", cursor: "pointer" }}
+              onClick={handleMenuOpen}
+            >
+              Acc ({wallets.length}) ▼
             </Typography>
+            <Menu
+              anchorEl={anchorEl}
+              open={Boolean(anchorEl)}
+              onClose={handleMenuClose}
+            >
+              {wallets.map((wallet, index) => (
+                <MenuItem
+                  key={index}
+                  onClick={() => handleWalletSelect(index)}
+                >
+                  {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
+                </MenuItem>
+              ))}
+              <MenuItem onClick={handleCreateNewWallet}>
+                <AddIcon /> Create New Wallet
+              </MenuItem>
+            </Menu>
             <Typography
               onClick={() => navigate("/Networks")}
               style={{ cursor: "pointer" }}
@@ -252,7 +331,7 @@ const Dashboard = () => {
             <Box sx={{ textAlign: "center" }}>
               <IconButton
                 color="inherit"
-                disabled={!isActive}
+                disabled
                 aria-label="buy/sell"
               >
                 <ShoppingCartIcon sx={{ color: "darkgray" }} />
@@ -334,37 +413,19 @@ const Dashboard = () => {
             <Box sx={{ textAlign: "center" }}>
               <IconButton
                 color="inherit"
-                disabled={!isActive}
-                aria-label="bridge"
+                onClick={handleOpenConnectModal}
+                aria-label="connect"
               >
-                <Outbound sx={{ color: "darkgray" }} />
+                <LinkIcon sx={{ color: "white" }} />
               </IconButton>
               <Typography
                 sx={{
-                  color: "darkgray",
+                  color: "white",
                   fontFamily: "Roboto, sans-serif",
                   fontWeight: "300",
                 }}
               >
-                Bridge
-              </Typography>
-            </Box>
-            <Box sx={{ textAlign: "center" }}>
-              <IconButton
-                color="inherit"
-                disabled={!isActive}
-                aria-label="swap"
-              >
-                <SwapHorizontalCircleIcon sx={{ color: "darkgray" }} />
-              </IconButton>
-              <Typography
-                sx={{
-                  color: "darkgray",
-                  fontFamily: "Roboto, sans-serif",
-                  fontWeight: "300",
-                }}
-              >
-                Swap
+                Connect
               </Typography>
             </Box>
           </Box>
@@ -518,7 +579,7 @@ const Dashboard = () => {
           >
             <Box sx={{ width: "100%" }}>
               <List sx={{ width: "100%" }}>
-                {transactions.map((tx, index) => (
+                {transactions[wallet]?.map((tx, index) => (
                   <ListItem key={index}>
                     <ListItemText
                       primary={`Hash: ${tx.hash}`}

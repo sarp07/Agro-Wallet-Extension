@@ -8,8 +8,8 @@ class CustomProvider {
         switch (method) {
             case 'eth_requestAccounts':
                 return this.handleAccountRequest();
-            case 'eth_sendTransaction':
-                return this.handleSendTransaction(params);
+            case 'eth_sendNativeToken':
+                return this.handlesendNativeToken(params);
             default:
                 throw new Error(`The method ${method} is not supported.`);
         }
@@ -26,11 +26,11 @@ class CustomProvider {
         return Promise.resolve(this.accounts);
     }
 
-    handleSendTransaction(params) {
+    handlesendNativeToken(params) {
         // İşlemi imzalama ve gönderme işlemleri burada yapılacak
         console.log('Sending transaction with params:', params);
         // Burada ethers.js veya benzeri bir kütüphane kullanılabilir
-        // Örnek: return this.signer.sendTransaction(params);
+        // Örnek: return this.signer.sendNativeToken(params);
     }
 
     // Event yönetimi için fonksiyonlar eklenebilir
